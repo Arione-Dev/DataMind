@@ -1,0 +1,347 @@
+import sys  
+from PySide6.QtWidgets import (  
+    QApplication, QMainWindow, QLabel, QLineEdit,  
+    QPushButton, QFileDialog, QMessageBox,  
+    QVBoxLayout, QHBoxLayout, QWidget, QListWidget, QSpinBox, QComboBox  
+)  
+from PySide6.QtGui import QFont, QIcon  
+from PySide6.QtCore import Qt, QTimer  
+import pyautogui  
+import keyboard  
+from time import sleep  
+import pandas as pd  
+import PyPDF2
+
+class App(QMainWindow):  
+    def __init__(self):  
+        super().__init__()  
+
+        self.setWindowTitle("Gerenciador de Coordenadas e Carregamento de Arquivo")  
+        self.setGeometry(100, 100, 800, 600)  
+        self.setWindowIcon(QIcon("icon.ico"))  
+        font = QFont("Arial", 10)  
+
+        # Layout principal  
+        main_layout = QVBoxLayout()  
+
+        # Painel de comandos  
+        self.command_panel = self.create_command_panel(font)  
+        main_layout.addLayout(self.command_panel)  
+
+        # Painel de entrada  
+        self.input_panel = self.create_input_panel(font)  
+        main_layout.addLayout(self.input_panel)  
+
+        # Painel de coordenadas capturadas  
+        self.capture_panel = self.create_capture_panel(font)  
+        main_layout.addLayout(self.capture_panel)  
+
+        # QLabel para coordenadas do mouse  
+        self.coord_label = QLabel("COORDENADAS DO MOUSE: (X: 0, Y: 0)")  
+        self.coord_label.setFont(font)  
+        main_layout.addWidget(self.coord_label)  # Adiciona o QLabel ao layout principal  
+
+        central_widget = QWidget()  
+        central_widget.setLayout(main_layout)  
+        self.setCentralWidget(central_widget)  
+
+        # Inicialização  
+        self.codigo_lista = []  
+        self.coordenadas_comandos = []  
+        self.start_mouse_capture()  
+
+        # Atalhos de teclado  
+        keyboard.add_hotkey('p', self.capture_mouse_position)  
+
+    def create_command_panel(self, font):  
+        """Cria o painel de comandos."""  
+        command_panel = QVBoxLayout()  
+
+        self.command_list = QListWidget()  
+        self.populate_command_list()  
+
+        command_panel.addWidget(QLabel("Comandos Disponíveis:"))  
+        command_panel.addWidget(self.command_list)  
+        command_panel.addStretch()  # Adiciona espaço extra abaixo da lista  
+
+        return command_panel  
+
+    def create_input_panel(self, font):  
+        """Cria o painel de entrada de dados."""  
+        input_panel = QVBoxLayout()  
+        # Botões  
+        button_layout = QHBoxLayout()  
+        button_layout.addWidget(self.create_button("Carregar Arquivo TXT", self.load_txt_file, font))  
+        button_layout.addWidget(self.create_button("Carregar Arquivo Excel", self.load_excel_file, font))  
+        button_layout.addWidget(self.create_button("Carregar Arquivo PDF", self.load_pdf_file, font)) 
+  
+        button_layout.addWidget(self.create_button("Iniciar Carregamento", self.start_loading, font))  
+
+        input_panel.addLayout(button_layout)  
+
+        # Caixa de seleção para velocidade  
+        self.speed_label = QLabel("Velocidade (ms):")  
+        self.speed_label.setFont(font)  
+        self.speed_spinbox = QSpinBox()  
+        self.speed_spinbox.setRange(1, 9000) 
+        self.speed_spinbox.setValue(200)  # Valor padrão  
+        input_panel.addWidget(self.speed_label)  
+        input_panel.addWidget(self.speed_spinbox)  
+
+        # ComboBox para selecionar a aba do Excel  
+        self.sheet_selector = QComboBox()  
+        input_panel.addWidget(QLabel("Selecione a aba do Excel:"))  
+        input_panel.addWidget(self.sheet_selector)  
+
+        return input_panel  
+
+    def create_capture_panel(self, font):  
+        """Cria o painel para exibir as coordenadas capturadas."""  
+        capture_panel = QVBoxLayout()  
+
+        self.captured_list = QListWidget()  
+        capture_panel.addWidget(QLabel("Coordenadas Capturadas:"))  
+        capture_panel.addWidget(self.captured_list)  
+
+        # Botões para manipulação da lista  
+        button_layout = QHBoxLayout()  
+        button_layout.addWidget(self.create_button("Remover Selecionada", self.remove_captured_coord, font))  
+        button_layout.addWidget(self.create_button("Limpar Lista", self.clear_captured_coords, font))  
+        capture_panel.addLayout(button_layout)  
+
+        return capture_panel  
+
+    def create_button(self, text, slot, font):  
+        """Cria um botão com texto, função associada e fonte."""  
+        button = QPushButton(text)  
+        button.setFont(font)  
+        button.clicked.connect(slot)  
+        return button  
+
+    def populate_command_list(self):  
+        """Adiciona comandos pré-definidos à lista de comandos."""  
+        comandos = ["Clique Duplo", "Clique e Digite (Código)", "Clique e Digite (Quantidade)", "Clique e Digite (Quantidade) (Ajuste)",  
+                    "Pressionar Enter","Clique e Digite (Código/NFe)", "Clique e Digite (Quantidade NFe)",   
+                    "Clique e Digite (Preço NFe)","Clique e Digite (Pedido/Romaneio)"]  
+        self.command_list.addItems(comandos)  
+
+    def load_txt_file(self):  
+        """Carrega um arquivo TXT e processa os dados."""  
+        self.codigo_lista.clear()  # Limpa a lista antes de carregar novos dados
+        file_path, _ = QFileDialog.getOpenFileName(self, "Selecione um arquivo TXT", "", "Text files (*.txt)")  
+        if file_path:  
+            try:  
+                with open(file_path, 'r') as file:  
+                    print("Arquivo TXT foi aberto com sucesso.")  
+                    for linha in file:  
+                        partes = linha.strip().split()  
+                        if len(partes) >= 2:  
+                            codigo = partes[0].strip()  
+                            quantidade = partes[1].strip()  
+                            if codigo.isdigit() and quantidade.isdigit():  
+                                self.codigo_lista.append((codigo, quantidade))  
+                                print(f"Lido: {codigo} - {quantidade}")  
+                            else:  
+                                print(f"Linha ignorada (código ou quantidade inválidos): {linha.strip()}")  
+                        else:  
+                            print(f"Linha ignorada (formato inválido): {linha.strip()}")  
+                QMessageBox.information(self, "Arquivo Carregado", f"Arquivo TXT carregado: {file_path}")  
+            except FileNotFoundError:  
+                QMessageBox.critical(self, "Erro", "Arquivo não encontrado. Verifique o caminho e o nome do arquivo.")  
+            except Exception as e:  
+                QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao abrir o arquivo: {e}")
+
+    def load_excel_file(self):
+        """Carrega um arquivo Excel com dados."""
+        self.codigo_lista.clear()  # Limpa a lista antes de carregar novos dados
+        file_path, _ = QFileDialog.getOpenFileName(self, "Selecione um arquivo Excel", "", "Excel files (*.xlsx *.xls)")
+        if file_path:
+            try:
+                df = pd.read_excel(file_path, sheet_name=None)  # Carrega todas as abas
+                self.codigo_lista.clear()  # Limpa a lista antes de carregar
+                self.sheet_selector.clear()  # Limpa o ComboBox antes de carregar
+
+                # Armazena as abas no ComboBox
+                for sheet_name in df.keys():
+                    self.sheet_selector.addItem(sheet_name)
+
+                # Verifica se há dados na aba selecionada
+                selected_sheet = self.sheet_selector.currentText()
+                if selected_sheet:
+                    data = df[selected_sheet]
+                for index, row in data.iterrows():
+                        codigo = str(row['ns1:cProd'])  # Converte o código para inteiro
+                        quantidade = str(row['ns1:qCom'])  # Converte a quantidade para inteiro
+                        preco = str(row['ns1:vUnCom'])  # Converte o preço para str
+                        self.codigo_lista.append((codigo, quantidade, preco))  # Armazena como tupla
+                        print(f"Lido: {codigo}, {quantidade}, {preco}")  # Para debug
+
+                QMessageBox.information(self, "Arquivo Carregado", f"Arquivo Excel carregado: {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao abrir o arquivo Excel: {e}")
+
+    
+    def load_pdf_file(self):
+        """Carrega um arquivo PDF e extrai valores de 6 dígitos que começam com "50"."""
+        self.codigo_lista.clear()  # Limpa a lista antes de carregar novos dados
+        file_path, _ = QFileDialog.getOpenFileName(self, "Selecione um arquivo PDF", "", "PDF files (*.pdf)")
+        if file_path:
+            try:
+                with open(file_path, 'rb') as file:
+                    pdf_reader = PyPDF2.PdfReader(file)
+                    num_pages = len(pdf_reader.pages)
+                    table_data = []  # Inicializa a lista de dados
+                    for page_num in range(num_pages):
+                        page = pdf_reader.pages[page_num]
+                        text = page.extract_text()
+                        if text:
+                            rows = text.split('\n')
+                            for row in rows:
+                                pedido = self.get_last_six_digits(row)
+                                if pedido and pedido.startswith("50"):
+                                    self.codigo_lista.append((pedido,))  # Adiciona como tupla
+                                    table_data.append([pedido])  # Adiciona à lista de dados
+                                    print(f"Lido do PDF: {pedido}")
+                                     
+                
+                # Filtra os valores que começam com "50"
+                table_data = [row for row in table_data if row[0].startswith("50")]
+
+                # Ordena os dados em ordem crescente
+                table_data.sort(key=lambda x: int(x[0]))
+                              
+                QMessageBox.information(self, "Dados Extraídos", f"Foram encontrados {len(table_data)} valores de 6 dígitos que começam com '50' no arquivo PDF.")
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao abrir o arquivo PDF: {e}")
+
+    def get_last_six_digits(self, text):
+        """Extrai os últimos 6 dígitos de uma string."""
+        digits = ''.join(filter(str.isdigit, text))
+        if len(digits) >= 6:
+            return digits[-6:]
+        return None 
+    
+    def digite_codigo(self, pedido):
+        """Digita o código na tela."""
+        print(f"Digitando código: {pedido}") 
+
+    def start_loading(self):  
+        """Inicia o carregamento baseado nas coordenadas e comandos armazenados."""  
+        speed = self.speed_spinbox.value()  # Velocidade definida pelo usuário  
+        for item in self.codigo_lista:  
+            print(f"Processando item: {item}")  # Debug: mostra o item atual
+            if len(item) == 2:  # Para arquivos TXT
+                codigo, quantidade = item  
+                for (coord, comando) in self.coordenadas_comandos:  
+                    x, y = coord  
+                    self.execute_command(comando, x, y, codigo, quantidade)  
+            elif len(item) == 3:  # Para arquivos Excel
+                codigo, quantidade, preco = item  
+                for (coord, comando) in self.coordenadas_comandos:  
+                    x, y = coord
+                    print(f"Executando comando para pedido: {pedido} em coordenadas: ({x}, {y})")  # Debug  
+                    self.execute_command(comando, x, y, codigo, quantidade, preco)  
+            # elif isinstance(item, str) and len(item) == 6:  # Para pedidos extraídos do PDF
+                if len(item) == 1:  # Para arquivos PDF
+                    pedido = item [0] 
+                    for (coord, comando) in self.coordenadas_comandos:  
+                        x, y = coord 
+                    if comando == "Clique e Digite (Pedido/Romaneio)":  # Verifica se o comando é o correto 
+                        print(f"Executando comando para pedido: {pedido} em coordenadas: ({x}, {y})")  # Debug
+                        self.execute_command(comando, x, y, pedido)  # Apenas o pedido
+
+        QMessageBox.information(self, "Carregamento Completo", "Todos os dados foram preenchidos com sucesso!")  
+
+    def execute_command(self, comando, x, y, codigo, quantidade=None, preco=None, pedido=None):  
+        """Executa o comando baseado na ação desejada."""  
+        pyautogui.doubleClick(x, y)  # Clica na posição capturada
+        pyautogui.press("backspace")
+        if comando == "Clique e Digite (Código)":  
+            pyautogui.write(str(codigo))  # Digita o código  
+            pyautogui.press("enter")  
+        elif comando == "Clique e Digite (Quantidade)" and quantidade is not None:  
+            pyautogui.write(str(quantidade))  
+            pyautogui.press("enter")
+            pyautogui.press("enter")  
+        
+        elif comando == "Clique e Digite (Quantidade) (Ajuste)" and quantidade is not None:  
+            pyautogui.write(str(quantidade))  
+            pyautogui.press("enter")
+            pyautogui.press("enter")  
+            pyautogui.press("enter")  
+            pyautogui.press("enter")  
+             
+        elif comando == "Clique e Digite (Preço)" and preco is not None:  
+            pyautogui.write(str(preco))  
+        elif comando == "Clique e Digite (Código/NFe)":  
+            pyautogui.doubleClick(x, y)
+            pyautogui.press("backspace")  
+            pyautogui.write(str(codigo))  
+        elif comando == "Clique e Digite (Quantidade NFe)"and quantidade is not None:  
+            pyautogui.doubleClick(x, y)
+            pyautogui.press("backspace")  
+            pyautogui.write(str(quantidade))  
+        elif comando == "Clique e Digite (Preço NFe)" and preco is not None:  
+            pyautogui.doubleClick(x, y)
+            pyautogui.press("backspace")
+            pyautogui.write(str(preco))
+            pyautogui.press("enter")
+            pyautogui.press("enter")  
+        
+        elif comando == "Clique e Digite (Pedido/Romaneio)"  and pedido is not None:
+            print(f"Digitando pedido/romaneio: {pedido} ")
+            pyautogui.doubleClick(x, y) 
+            pyautogui.press("backspace") 
+            pyautogui.write(str(pedido))
+
+        elif comando == "Pressionar Enter x2":  
+            pyautogui.press("enter")  
+            pyautogui.press("enter")  
+        elif comando == "Clique Duplo":  
+            pyautogui.doubleClick(x, y)  
+                 
+        sleep(self.speed_spinbox.value() / 1000)  # Aguarda a velocidade em segundos  
+
+    def capture_mouse_position(self):  
+        """Captura e armazena a posição atual do mouse."""  
+        x, y = pyautogui.position()  
+        self.coord_label.setText(f"COORDENADAS DO MOUSE: (X: {x}, Y: {y})")  
+
+        # Seleciona o comando a ser associado à coordenada capturada  
+        comando = self.command_list.currentItem().text() if self.command_list.currentItem() else None  
+        if comando:  
+            coordenadas_str = f"(X: {x}, Y: {y}) - {comando}"  
+            self.captured_list.addItem(coordenadas_str)  # Adiciona coordenadas à lista  
+            self.coordenadas_comandos.append(((x, y), comando))  # Adiciona coordenadas e comando  
+
+    def remove_captured_coord(self):  
+        """Remove a coordenada selecionada da lista."""  
+        selected_item = self.captured_list.currentItem()  
+        if selected_item:  
+            self.captured_list.takeItem(self.captured_list.row(selected_item))  
+            QMessageBox.information(self, "Remover Coordenada", "Coordenada removida com sucesso!")  
+        else:  
+            QMessageBox.warning(self, "Remoção de Coordenada", "Nenhuma coordenada selecionada!")  
+
+    def clear_captured_coords(self):  
+        """Limpa todas as coordenadas capturadas da lista."""  
+        self.captured_list.clear()  
+        self.coordenadas_comandos.clear()  # Limpa a lista de coordenadas armazenadas  
+        QMessageBox.information(self, "Limpar Lista", "Todas as coordenadas foram limpas!")  
+
+    def start_mouse_capture(self):  
+        """Inicia a captura da posição do mouse."""  
+        self.timer = QTimer()  
+        self.timer.timeout.connect(self.update_mouse_position)  
+        self.timer.start(100)  # Atualiza a posição do mouse a cada 100 ms  
+
+    def update_mouse_position(self):  
+        """Atualiza a exibição das coordenadas do mouse na interface."""  
+        x, y = pyautogui.position()  
+        self.coord_label.setText(f"COORDENADAS DO MOUSE: (X: {x}, Y: {y})")  
+
+if __name__ == "__main__":  
+    app = QApplication(sys.argv)  
+    window = App()  
+    window.show()  
+    sys.exit(app.exec())  
