@@ -1,11 +1,11 @@
 import sys  
-from PySide6.QtWidgets import (  
+from PyQt6.QtWidgets import (  
     QApplication, QMainWindow, QLabel, QLineEdit,  
     QPushButton, QFileDialog, QMessageBox,  
     QVBoxLayout, QHBoxLayout, QWidget, QListWidget, QSpinBox, QComboBox  
 )  
-from PySide6.QtGui import QFont, QIcon  
-from PySide6.QtCore import Qt, QTimer  
+from PyQt6.QtGui import QFont, QIcon  
+from PyQt6.QtCore import Qt, QTimer  
 import pyautogui  
 import keyboard  
 from time import sleep  
@@ -121,7 +121,8 @@ class App(QMainWindow):
     def populate_command_list(self):  
         """Adiciona comandos pré-definidos à lista de comandos."""  
         comandos = ["Clique Duplo", "Clique e Digite (Código)", "Clique e Digite (Quantidade)", "Clique e Digite (Quantidade) (Ajuste)",  
-                    "Pressionar Enter","Clique e Digite (Código/NFe)", "Clique e Digite (Quantidade NFe)",   
+                    "Pressionar Enter","Clique e Digite: Preço",   
+                    "Clique e Digite (Código/NFe)", "Clique e Digite (Quantidade NFe)",   
                     "Clique e Digite (Preço NFe)","Clique e Digite (Pedido/Romaneio)"]  
         self.command_list.addItems(comandos)  
 
@@ -229,7 +230,6 @@ class App(QMainWindow):
         """Inicia o carregamento baseado nas coordenadas e comandos armazenados."""  
         speed = self.speed_spinbox.value()  # Velocidade definida pelo usuário  
         for item in self.codigo_lista:  
-            print(f"Processando item: {item}")  # Debug: mostra o item atual
             if len(item) == 2:  # Para arquivos TXT
                 codigo, quantidade = item  
                 for (coord, comando) in self.coordenadas_comandos:  
@@ -238,16 +238,13 @@ class App(QMainWindow):
             elif len(item) == 3:  # Para arquivos Excel
                 codigo, quantidade, preco = item  
                 for (coord, comando) in self.coordenadas_comandos:  
-                    x, y = coord
-                    print(f"Executando comando para pedido: {pedido} em coordenadas: ({x}, {y})")  # Debug  
+                    x, y = coord  
                     self.execute_command(comando, x, y, codigo, quantidade, preco)  
             # elif isinstance(item, str) and len(item) == 6:  # Para pedidos extraídos do PDF
                 if len(item) == 1:  # Para arquivos PDF
                     pedido = item [0] 
                     for (coord, comando) in self.coordenadas_comandos:  
-                        x, y = coord 
-                    if comando == "Clique e Digite (Pedido/Romaneio)":  # Verifica se o comando é o correto 
-                        print(f"Executando comando para pedido: {pedido} em coordenadas: ({x}, {y})")  # Debug
+                        x, y = coord  
                         self.execute_command(comando, x, y, pedido)  # Apenas o pedido
 
         QMessageBox.information(self, "Carregamento Completo", "Todos os dados foram preenchidos com sucesso!")  
@@ -299,7 +296,14 @@ class App(QMainWindow):
             pyautogui.press("enter")  
         elif comando == "Clique Duplo":  
             pyautogui.doubleClick(x, y)  
-                 
+        elif comando == "Clique e Digite: Filial":  
+            pyautogui.write(self.entry_filial.text())  
+        elif comando == "Clique e Digite: Grupo":  
+            pyautogui.write(self.entry_grupo.text())  
+        elif comando == "Clique e Digite: Nome":  
+            pyautogui.write(self.entry_nome.text()) 
+             
+
         sleep(self.speed_spinbox.value() / 1000)  # Aguarda a velocidade em segundos  
 
     def capture_mouse_position(self):  
@@ -344,4 +348,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)  
     window = App()  
     window.show()  
-    sys.exit(app.exec())  
+    sys.exit(app.exec())
